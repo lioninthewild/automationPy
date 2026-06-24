@@ -8,6 +8,18 @@ app.config["UPLOAD_FOLDER"] = "uploads"
 app.config["OUTPUT_FOLDER"] = "output"
 
 
+def _cleanup_folder(folder):
+    for filename in os.listdir(folder):
+        if filename == ".gitkeep":
+            continue
+        path = os.path.join(folder, filename)
+        try:
+            if os.path.isfile(path):
+                os.remove(path)
+        except Exception:
+            pass
+
+
 @app.route("/audio/<filename>")
 def serve_audio(filename):
     return send_from_directory(app.config["OUTPUT_FOLDER"], filename)
@@ -62,6 +74,13 @@ def index():
                 audio_file=audio_file, error=error)
 
     return render_template("index.html")
+
+
+@app.route("/cleanup", methods=["POST"])
+def cleanup():
+    _cleanup_folder(app.config["UPLOAD_FOLDER"])
+    _cleanup_folder(app.config["OUTPUT_FOLDER"])
+    return render_template("index.html", cleaned=True)
 
 
 if __name__ == "__main__":

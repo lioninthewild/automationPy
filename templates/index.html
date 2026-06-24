@@ -39,5 +39,13 @@
             <source src="{{ url_for('serve_audio', filename=audio_file) }}" type="audio/wav">
         </audio>
     {% endif %}
+
+    <hr>
+    <form method="post" action="/cleanup">
+        <button type="submit">Clean up files</button>
+    </form>
+    {% if cleaned %}
+        <p>Uploaded PDFs and audio files have been deleted.</p>
+    {% endif %}
 </body>
 </html>
