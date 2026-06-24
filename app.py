@@ -1,8 +1,7 @@
 import os
 import time
 from flask import Flask, render_template, request, send_from_directory
-from pdf_to_audiobook import extract_text
-import pyttsx3
+from pdf_to_audiobook import extract_text, convert_to_audio
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "uploads"
@@ -17,7 +16,6 @@ def serve_audio(filename):
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        # --- Step 1: Upload PDF ---
         file = request.files.get("pdf")
         if file and file.filename:
             filepath = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
@@ -37,7 +35,6 @@ def index():
             return render_template("index.html",
                 uploaded=file.filename, preview=preview, error=error)
 
-        # --- Step 2: Convert to Audio ---
         convert_name = request.form.get("convert")
         if convert_name:
             filepath = os.path.join(app.config["UPLOAD_FOLDER"], convert_name)
@@ -53,9 +50,7 @@ def index():
                     audio_name = f"{os.path.splitext(convert_name)[0]}_{timestamp}.wav"
                     audio_path = os.path.join(app.config["OUTPUT_FOLDER"], audio_name)
 
-                    engine = pyttsx3.init()
-                    engine.save_to_file(text, audio_path)
-                    engine.runAndWait()
+                    convert_to_audio(text, audio_path)
                     audio_file = audio_name
                 else:
                     error = "No text could be extracted from this PDF."
