@@ -14,5 +14,14 @@
     {% if uploaded %}
         <p>Uploaded <strong>{{ uploaded }}</strong> successfully.</p>
     {% endif %}
+
+    {% if error %}
+        <p style="color:red">{{ error }}</p>
+    {% endif %}
+
+    {% if preview %}
+        <h3>Preview (first 500 characters)</h3>
+        <pre style="white-space:pre-wrap">{{ preview }}</pre>
+    {% endif %}
 </body>
 </html>
