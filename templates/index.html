@@ -7,12 +7,14 @@
 </head>
 <body>
     <h1>PDF to Audiobook</h1>
+
     <form method="post" enctype="multipart/form-data">
         <input type="file" name="pdf" accept=".pdf" required>
         <button type="submit">Upload</button>
     </form>
+
     {% if uploaded %}
-        <p>Uploaded <strong>{{ uploaded }}</strong> successfully.</p>
+        <p><strong>{{ uploaded }}</strong></p>
     {% endif %}
 
     {% if error %}
@@ -22,6 +24,20 @@
     {% if preview %}
         <h3>Preview (first 500 characters)</h3>
         <pre style="white-space:pre-wrap">{{ preview }}</pre>
+    {% endif %}
+
+    {% if uploaded and not audio_file and not error %}
+        <form method="post">
+            <input type="hidden" name="convert" value="{{ uploaded }}">
+            <button type="submit">Convert to Audio</button>
+        </form>
+    {% endif %}
+
+    {% if audio_file %}
+        <h3>Listen</h3>
+        <audio controls style="width:100%">
+            <source src="{{ url_for('serve_audio', filename=audio_file) }}" type="audio/wav">
+        </audio>
     {% endif %}
 </body>
 </html>
