@@ -5,6 +5,7 @@ from pdf_to_audiobook import extract_text, convert_sync
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "uploads"
 app.config["OUTPUT_FOLDER"] = "output"
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 
 
 def _cleanup_folder(folder):
@@ -34,6 +35,7 @@ def index():
 
             preview = None
             error = None
+            text = None
             try:
                 text = extract_text(filepath)
                 if text.strip():
