@@ -38,7 +38,7 @@
             <span id="status"></span>
         </p>
         <script>
-            var fullText = {{ full_text|tojson }};
+            var fullText = {{ full_text|tojson }}.replace(/\s+/g, ' ');
             var container = document.getElementById("text-display");
             var words = fullText.match(/\S+\s*/g) || [];
             var charOffset = 0;
