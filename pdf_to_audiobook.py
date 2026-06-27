@@ -11,6 +11,12 @@ VOICES = {
     "male": "en-US-GuyNeural",
 }
 
+RATES = {
+    "slow": "-20%",
+    "normal": "+0%",
+    "fast": "+20%",
+}
+
 
 def extract_text(pdf_path: str) -> str:
     text = []
@@ -50,15 +56,16 @@ def _concat_mp3s(paths: list[str], output_path: str):
         raise RuntimeError("ffmpeg is required to merge audio chunks. Install it with: sudo pacman -S ffmpeg")
 
 
-async def convert_to_audio(text: str, output_path: str, voice: str = "female") -> str:
+async def convert_to_audio(text: str, output_path: str, voice: str = "female", rate: str = "normal") -> str:
     chunks = _chunk_text(text)
     temp_files = []
     voice_name = VOICES.get(voice, VOICES["female"])
+    rate_val = RATES.get(rate, "+0%")
 
     for chunk in chunks:
         fd, path = tempfile.mkstemp(suffix=".mp3")
         os.close(fd)
-        communicate = edge_tts.Communicate(chunk, voice_name)
+        communicate = edge_tts.Communicate(chunk, voice_name, rate=rate_val)
         await communicate.save(path)
         if os.path.getsize(path) > 0:
             temp_files.append(path)
@@ -72,8 +79,8 @@ async def convert_to_audio(text: str, output_path: str, voice: str = "female") -
     return output_path
 
 
-def convert_sync(text: str, output_path: str, voice: str = "female") -> str:
-    return asyncio.run(convert_to_audio(text, output_path, voice))
+def convert_sync(text: str, output_path: str, voice: str = "female", rate: str = "normal") -> str:
+    return asyncio.run(convert_to_audio(text, output_path, voice, rate))
 
 
 def main():
@@ -82,6 +89,8 @@ def main():
     parser.add_argument("-o", "--output", help="Save speech to an audio file (e.g. output.mp3)")
     parser.add_argument("--voice", choices=["female", "male"], default="female",
                         help="Voice to use (default: female)")
+    parser.add_argument("--rate", choices=["slow", "normal", "fast"], default="normal",
+                        help="Speaking speed (default: normal)")
     args = parser.parse_args()
 
     print(f"Extracting text from {args.pdf}...")
@@ -95,7 +104,7 @@ def main():
     output_path = args.output or os.path.splitext(args.pdf)[0] + ".mp3"
 
     print("Converting to audio (this may take a while)...")
-    convert_sync(text, output_path, args.voice)
+    convert_sync(text, output_path, args.voice, args.rate)
     print(f"Done! Saved to {output_path}")
 
 

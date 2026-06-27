@@ -53,6 +53,7 @@ def index():
             audio_file = None
             error = None
             voice = request.form.get("voice", "female")
+            rate = request.form.get("rate", "normal")
 
             try:
                 text = extract_text(filepath)
@@ -61,7 +62,7 @@ def index():
                     audio_name = f"{os.path.splitext(convert_name)[0]}.mp3"
                     audio_path = os.path.join(app.config["OUTPUT_FOLDER"], audio_name)
 
-                    convert_sync(text, audio_path, voice)
+                    convert_sync(text, audio_path, voice, rate)
                     audio_file = audio_name
                 else:
                     error = "No text could be extracted from this PDF."
