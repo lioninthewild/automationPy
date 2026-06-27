@@ -44,7 +44,8 @@ def index():
                 error = f"Failed to read PDF: {e}"
 
             return render_template("index.html",
-                uploaded=file.filename, preview=preview, error=error)
+                uploaded=file.filename, preview=preview,
+                full_text=text, error=error)
 
         convert_name = request.form.get("convert")
         if convert_name:

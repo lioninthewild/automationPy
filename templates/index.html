@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF to Audiobook</title>
+    <style>
+        .w.highlight { background: #ffeb3b; border-radius: 2px; }
+        .w { transition: background 0.15s; }
+        #text-display { white-space: pre-wrap; }
+    </style>
 </head>
 <body>
     <h1>PDF to Audiobook</h1>
@@ -21,7 +26,77 @@
         <p style="color:red">{{ error }}</p>
     {% endif %}
 
-    {% if preview %}
+    {% if full_text %}
+        <h3>Reader</h3>
+        <div style="height:300px;overflow-y:auto;border:1px solid #ccc;padding:10px;border-radius:4px">
+            <div id="text-display"></div>
+        </div>
+        <p>
+            <button onclick="play()">▶ Play</button>
+            <button onclick="pauseReader()">⏸ Pause</button>
+            <button onclick="stopReader()">⏹ Stop</button>
+            <span id="status"></span>
+        </p>
+        <script>
+            var fullText = {{ full_text|tojson }};
+            var container = document.getElementById("text-display");
+            var words = fullText.match(/\S+\s*/g) || [];
+            var charOffset = 0;
+            var wordElements = [];
+            words.forEach(function(w) {
+                var span = document.createElement("span");
+                span.className = "w";
+                span.dataset.start = charOffset;
+                span.dataset.end = charOffset + w.length;
+                span.textContent = w;
+                container.appendChild(span);
+                wordElements.push(span);
+                charOffset += w.length;
+            });
+
+            var synth = window.speechSynthesis;
+            var utterance = null;
+            var currentWordIdx = 0;
+
+            function play() {
+                if (!synth) { document.getElementById("status").textContent = "Speech not supported"; return; }
+                if (synth.speaking && !synth.paused) return;
+                if (synth.paused) { synth.resume(); return; }
+                stopReader();
+                if (currentWordIdx >= wordElements.length) currentWordIdx = 0;
+
+                utterance = new SpeechSynthesisUtterance(fullText);
+                utterance.rate = 1.0;
+                utterance.onboundary = function(e) {
+                    if (e.name !== "word") return;
+                    if (currentWordIdx > 0 && currentWordIdx - 1 < wordElements.length)
+                        (wordElements[currentWordIdx - 1] || {}).classList &&
+                        wordElements[currentWordIdx - 1].classList.remove("highlight");
+                    while (currentWordIdx < wordElements.length) {
+                        var s = wordElements[currentWordIdx];
+                        if (e.charIndex >= parseInt(s.dataset.start) && e.charIndex < parseInt(s.dataset.end)) {
+                            s.classList.add("highlight");
+                            s.scrollIntoView({ block: "nearest" });
+                            break;
+                        }
+                        currentWordIdx++;
+                    }
+                    currentWordIdx++;
+                };
+                utterance.onend = function() { currentWordIdx = 0; };
+                utterance.onerror = function() { currentWordIdx = 0; };
+                synth.speak(utterance);
+            }
+            function pauseReader() { if (synth) synth.pause(); }
+            function stopReader() {
+                if (synth) synth.cancel();
+                currentWordIdx = 0;
+                wordElements.forEach(function(el) { el.classList.remove("highlight"); });
+            }
+        </script>
+    {% endif %}
+
+    {% if preview and not full_text %}
         <h3>Preview (first 500 characters)</h3>
         <pre style="white-space:pre-wrap">{{ preview }}</pre>
     {% endif %}
