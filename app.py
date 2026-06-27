@@ -1,7 +1,6 @@
 import os
-import time
 from flask import Flask, render_template, request, send_from_directory
-from pdf_to_audiobook import extract_text, convert_to_audio
+from pdf_to_audiobook import extract_text, convert_sync
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "uploads"
@@ -53,16 +52,16 @@ def index():
             preview = None
             audio_file = None
             error = None
+            voice = request.form.get("voice", "female")
 
             try:
                 text = extract_text(filepath)
                 if text.strip():
                     preview = text[:500]
-                    timestamp = int(time.time())
-                    audio_name = f"{os.path.splitext(convert_name)[0]}_{timestamp}.wav"
+                    audio_name = f"{os.path.splitext(convert_name)[0]}.mp3"
                     audio_path = os.path.join(app.config["OUTPUT_FOLDER"], audio_name)
 
-                    convert_to_audio(text, audio_path)
+                    convert_sync(text, audio_path, voice)
                     audio_file = audio_name
                 else:
                     error = "No text could be extracted from this PDF."

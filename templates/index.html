@@ -29,6 +29,10 @@
     {% if uploaded and not audio_file and not error %}
         <form method="post">
             <input type="hidden" name="convert" value="{{ uploaded }}">
+            <p>
+                <label><input type="radio" name="voice" value="female" checked> Female</label>
+                <label><input type="radio" name="voice" value="male"> Male (deep)</label>
+            </p>
             <button type="submit">Convert to Audio</button>
         </form>
     {% endif %}
@@ -36,7 +40,7 @@
     {% if audio_file %}
         <h3>Listen</h3>
         <audio controls style="width:100%">
-            <source src="{{ url_for('serve_audio', filename=audio_file) }}" type="audio/wav">
+            <source src="{{ url_for('serve_audio', filename=audio_file) }}" type="audio/mpeg">
         </audio>
     {% endif %}
 

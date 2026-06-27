@@ -1,11 +1,15 @@
 import argparse
+import asyncio
 import os
-import struct
+import subprocess
 import tempfile
-import re
-import wave
-import pyttsx3
+import edge_tts
 import pdfplumber
+
+VOICES = {
+    "female": "en-US-JennyNeural",
+    "male": "en-US-GuyNeural",
+}
 
 
 def extract_text(pdf_path: str) -> str:
@@ -18,7 +22,7 @@ def extract_text(pdf_path: str) -> str:
     return "\n".join(text)
 
 
-def _chunk_text(text: str, max_chars: int = 2000) -> list[str]:
+def _chunk_text(text: str, max_chars: int = 10000) -> list[str]:
     words = text.split()
     chunks = []
     current = []
@@ -35,47 +39,49 @@ def _chunk_text(text: str, max_chars: int = 2000) -> list[str]:
     return [c for c in chunks if c.strip()]
 
 
-def _concat_wavs(paths: list[str], output_path: str):
-    data_chunks = []
-    params = None
-    for path in paths:
-        with wave.open(path, "rb") as w:
-            if params is None:
-                params = w.getparams()
-            data_chunks.append(w.readframes(w.getnframes()))
-
-    with wave.open(output_path, "wb") as out:
-        out.setparams(params)
-        out.writeframes(b"".join(data_chunks))
+def _concat_mp3s(paths: list[str], output_path: str):
+    inputs = "|".join(paths)
+    try:
+        subprocess.run(
+            ["ffmpeg", "-i", f"concat:{inputs}", "-acodec", "copy", "-y", output_path],
+            capture_output=True, check=True,
+        )
+    except FileNotFoundError:
+        raise RuntimeError("ffmpeg is required to merge audio chunks. Install it with: sudo pacman -S ffmpeg")
 
 
-def convert_to_audio(text: str, output_path: str) -> str:
+async def convert_to_audio(text: str, output_path: str, voice: str = "female") -> str:
     chunks = _chunk_text(text)
     temp_files = []
+    voice_name = VOICES.get(voice, VOICES["female"])
 
-    engine = pyttsx3.init()
-
-    for i, chunk in enumerate(chunks):
-        fd, path = tempfile.mkstemp(suffix=".wav")
+    for chunk in chunks:
+        fd, path = tempfile.mkstemp(suffix=".mp3")
         os.close(fd)
-        engine.save_to_file(chunk, path)
-        engine.runAndWait()
-        if os.path.getsize(path) > 44:
+        communicate = edge_tts.Communicate(chunk, voice_name)
+        await communicate.save(path)
+        if os.path.getsize(path) > 0:
             temp_files.append(path)
         else:
             os.remove(path)
 
-    _concat_wavs(temp_files, output_path)
+    _concat_mp3s(temp_files, output_path)
 
     for path in temp_files:
         os.remove(path)
     return output_path
 
 
+def convert_sync(text: str, output_path: str, voice: str = "female") -> str:
+    return asyncio.run(convert_to_audio(text, output_path, voice))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Convert PDF to audiobook")
     parser.add_argument("pdf", help="Path to the PDF file")
-    parser.add_argument("-o", "--output", help="Save speech to an audio file (e.g. output.wav)")
+    parser.add_argument("-o", "--output", help="Save speech to an audio file (e.g. output.mp3)")
+    parser.add_argument("--voice", choices=["female", "male"], default="female",
+                        help="Voice to use (default: female)")
     args = parser.parse_args()
 
     print(f"Extracting text from {args.pdf}...")
@@ -86,10 +92,10 @@ def main():
         return
 
     print(f"Extracted {len(text)} characters.")
-    output_path = args.output or os.path.splitext(args.pdf)[0] + ".wav"
+    output_path = args.output or os.path.splitext(args.pdf)[0] + ".mp3"
 
     print("Converting to audio (this may take a while)...")
-    convert_to_audio(text, output_path)
+    convert_sync(text, output_path, args.voice)
     print(f"Done! Saved to {output_path}")
 
 
