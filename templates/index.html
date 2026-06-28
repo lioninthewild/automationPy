@@ -86,10 +86,19 @@
                     <div class="border rounded p-3 mb-2 bg-white" style="height:300px;overflow-y:auto">
                         <div id="text-display"></div>
                     </div>
-                    <div class="d-flex gap-2 align-items-center mb-3">
+                    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
                         <button id="playBtn" class="btn btn-sm btn-outline-primary reader-btn" onclick="playReader()">▶ Play</button>
                         <button id="pauseBtn" class="btn btn-sm btn-outline-warning reader-btn" onclick="pauseReader()" disabled>⏸ Pause</button>
                         <button id="stopBtn" class="btn btn-sm btn-outline-secondary reader-btn" onclick="stopReader()" disabled>⏹ Stop</button>
+                        <select id="voiceSelect" class="form-select form-select-sm" style="width:auto">
+                            <option value="US Female">US Female</option>
+                            <option value="US Male">US Male</option>
+                            <option value="UK Female">UK Female</option>
+                            <option value="UK Male">UK Male</option>
+                        </select>
+                        <label class="small text-muted">Speed</label>
+                        <input type="range" id="speedSlider" min="0.5" max="2.0" step="0.1" value="1.0" style="width:80px">
+                        <span id="speedLabel" class="small text-muted" style="min-width:1.8em">1.0x</span>
                         <span id="status" class="text-muted small"></span>
                     </div>
                 {% endif %}
@@ -125,11 +134,48 @@
             var pauseBtn = document.getElementById("pauseBtn");
             var stopBtn = document.getElementById("stopBtn");
             var statusEl = document.getElementById("status");
+            var voiceSelect = document.getElementById("voiceSelect");
+            var speedSlider = document.getElementById("speedSlider");
+            var speedLabel = document.getElementById("speedLabel");
+
+            speedSlider.addEventListener("input", function() {
+                speedLabel.textContent = parseFloat(speedSlider.value).toFixed(1) + "x";
+            });
 
             function setButtons(playing, paused) {
                 playBtn.disabled = playing && !paused;
                 pauseBtn.disabled = !playing || paused;
                 stopBtn.disabled = !playing;
+            }
+
+            var voiceMap = { "US Female": "female", "US Male": "male", "UK Female": "female", "UK Male": "male" };
+            var voiceLangMap = { "US Female": "en-US", "US Male": "en-US", "UK Female": "en-GB", "UK Male": "en-GB" };
+            var availableVoices = [];
+            var voicesReady = false;
+            function loadVoices() {
+                availableVoices = synth.getVoices();
+                if (availableVoices.length > 0) voicesReady = true;
+            }
+            loadVoices();
+            if (synth.onvoiceschanged !== undefined) {
+                synth.onvoiceschanged = loadVoices;
+            }
+
+            function findVoice(preset) {
+                if (!voicesReady) return null;
+                var gender = voiceMap[preset];
+                var lang = voiceLangMap[preset];
+                for (var i = 0; i < availableVoices.length; i++) {
+                    var v = availableVoices[i];
+                    if (v.lang === lang && v.name.toLowerCase().indexOf(gender) >= 0) {
+                        return v;
+                    }
+                }
+                for (var i = 0; i < availableVoices.length; i++) {
+                    var v = availableVoices[i];
+                    if (v.lang === lang) return v;
+                }
+                return null;
             }
 
             function findSpan(charIndex) {
@@ -150,7 +196,9 @@
                 wordElements.forEach(function(el) { el.classList.remove("highlight"); });
 
                 utterance = new SpeechSynthesisUtterance(fullText);
-                utterance.rate = 1.0;
+                utterance.rate = parseFloat(speedSlider.value);
+                var selectedVoice = findVoice(voiceSelect.value);
+                if (selectedVoice) utterance.voice = selectedVoice;
                 utterance.onboundary = function(e) {
                     if (e.name !== "word") return;
                     wordElements.forEach(function(el) { el.classList.remove("highlight"); });
