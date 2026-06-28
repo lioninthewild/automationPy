@@ -56,21 +56,26 @@ def _concat_mp3s(paths: list[str], output_path: str):
         raise RuntimeError("ffmpeg is required to merge audio chunks. Install it with: sudo pacman -S ffmpeg")
 
 
+async def _save_chunk(chunk: str, voice_name: str, rate_val: str) -> str | None:
+    fd, path = tempfile.mkstemp(suffix=".mp3")
+    os.close(fd)
+    communicate = edge_tts.Communicate(chunk, voice_name, rate=rate_val)
+    await communicate.save(path)
+    if os.path.getsize(path) > 0:
+        return path
+    os.remove(path)
+    return None
+
+
 async def convert_to_audio(text: str, output_path: str, voice: str = "female", rate: str = "normal") -> str:
     chunks = _chunk_text(text)
-    temp_files = []
     voice_name = VOICES.get(voice, VOICES["female"])
     rate_val = RATES.get(rate, "+0%")
 
-    for chunk in chunks:
-        fd, path = tempfile.mkstemp(suffix=".mp3")
-        os.close(fd)
-        communicate = edge_tts.Communicate(chunk, voice_name, rate=rate_val)
-        await communicate.save(path)
-        if os.path.getsize(path) > 0:
-            temp_files.append(path)
-        else:
-            os.remove(path)
+    results = await asyncio.gather(*[
+        _save_chunk(chunk, voice_name, rate_val) for chunk in chunks
+    ])
+    temp_files = [f for f in results if f]
 
     _concat_mp3s(temp_files, output_path)
 
