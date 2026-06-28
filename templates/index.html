@@ -6,9 +6,7 @@
     <title>PDF to Audiobook</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        .w.highlight { background: #3b82f6; color: white; border-radius: 3px; padding: 0 1px; }
-        .w { transition: background 0.15s, color 0.15s; }
-        #text-display { white-space: pre-wrap; }
+        #text-display { white-space: pre-wrap; font-size: 1.1rem; line-height: 1.7; }
         .tab-content > .tab-pane { display: none; }
         .tab-content > .tab-pane.active { display: block; }
         .reader-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -38,6 +36,7 @@
                 <div class="tab-content">
                     <div class="tab-pane active" id="tab-file">
                         <form id="fileForm" method="post" enctype="multipart/form-data" action="/">
+                            <input type="hidden" name="input_type" value="file">
                             <div class="mb-3">
                                 <label class="form-label">Upload a PDF</label>
                                 <input type="file" name="pdf" accept=".pdf" id="fileInput" style="display:none">
@@ -51,6 +50,7 @@
                     </div>
                     <div class="tab-pane" id="tab-text">
                         <form id="textForm" method="post" action="/">
+                            <input type="hidden" name="input_type" value="text">
                             <div class="mb-3">
                                 <label class="form-label">Paste your text</label>
                                 <textarea class="form-control" name="content" rows="8" placeholder="Paste or type your text here..."></textarea>
@@ -82,14 +82,7 @@
                     </div>
                     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
                         <button id="playBtn" class="btn btn-sm btn-outline-primary reader-btn" onclick="playReader()">&#x25B6; Play</button>
-                        <button id="pauseBtn" class="btn btn-sm btn-outline-warning reader-btn" onclick="pauseReader()" disabled>&#x23F8;&#xFE0F; Pause</button>
                         <button id="stopBtn" class="btn btn-sm btn-outline-secondary reader-btn" onclick="stopReader()" disabled>&#x23F9;&#xFE0F; Stop</button>
-                        <select id="voiceSelect" class="form-select form-select-sm" style="width:auto">
-                            <option value="US Female">US Female</option>
-                            <option value="US Male">US Male</option>
-                            <option value="UK Female">UK Female</option>
-                            <option value="UK Male">UK Male</option>
-                        </select>
                         <label class="small text-muted">Speed</label>
                         <input type="range" id="speedSlider" min="0.5" max="2.0" step="0.1" value="1.0" style="width:80px">
                         <span id="speedLabel" class="small text-muted" style="min-width:1.8em">1.0x</span>
@@ -101,145 +94,95 @@
         </div>
     </div>
 
+    <audio id="audioPlayer" style="display:none"></audio>
+
     <script>
         var fullText = {{ (full_text|tojson) if full_text else '""' }};
         var container = document.getElementById("text-display");
-        var wordElements = [];
-        var synth = window.speechSynthesis;
-        var utterance = null;
-        var currentWordIdx = 0;
-        var pausedWordIdx = 0;
         var playBtn = document.getElementById("playBtn");
-        var pauseBtn = document.getElementById("pauseBtn");
         var stopBtn = document.getElementById("stopBtn");
         var statusEl = document.getElementById("status");
-        var voiceSelect = document.getElementById("voiceSelect");
         var speedSlider = document.getElementById("speedSlider");
         var speedLabel = document.getElementById("speedLabel");
         var errorDisplay = document.getElementById("errorDisplay");
         var readerSection = document.getElementById("readerSection");
+        var audioPlayer = document.getElementById("audioPlayer");
+        var audioUrl = null;
 
         function cleanText(text) {
-            return text.replace(/\s+/g, ' ').replace(/[^a-zA-Z0-9\s.,!?'-]/g, '');
+            return text.replace(/\s+/g, ' ');
         }
 
         function initReader(text) {
             stopReader();
             fullText = cleanText(text);
-            container.innerHTML = '';
-            wordElements = [];
-            var words = fullText.match(/\S+\s*/g) || [];
-            words.forEach(function(w) {
-                var span = document.createElement("span");
-                span.className = "w";
-                span.textContent = w;
-                container.appendChild(span);
-                wordElements.push(span);
-            });
-            pausedWordIdx = 0;
-            currentWordIdx = 0;
+            container.textContent = fullText;
+            audioUrl = null;
         }
 
         speedSlider.addEventListener("input", function() {
             speedLabel.textContent = parseFloat(speedSlider.value).toFixed(1) + "x";
+            audioPlayer.playbackRate = parseFloat(speedSlider.value);
         });
 
-        function setButtons(playing, paused) {
-            playBtn.disabled = playing && !paused;
-            pauseBtn.disabled = !playing || paused;
+        function setButtons(playing) {
+            playBtn.disabled = playing;
             stopBtn.disabled = !playing;
         }
 
-        function speakUtterance(text) {
-            utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = parseFloat(speedSlider.value);
-            var selectedVoice = findVoice(voiceSelect.value);
-            if (selectedVoice) utterance.voice = selectedVoice;
-            utterance.onboundary = function(e) {
-                if (e.name !== "word") return;
-                wordElements.forEach(function(el) { el.classList.remove("highlight"); });
-                if (currentWordIdx < wordElements.length) {
-                    wordElements[currentWordIdx].classList.add("highlight");
-                    wordElements[currentWordIdx].scrollIntoView({ block: "nearest" });
-                }
-                currentWordIdx++;
-            };
-            utterance.onstart = function() { setButtons(true, false); statusEl.textContent = "Playing"; };
-            utterance.onend = function() { setButtons(false, false); statusEl.textContent = "Finished"; pausedWordIdx = 0; currentWordIdx = 0; };
-            utterance.onerror = function() { setButtons(false, false); statusEl.textContent = "Error"; pausedWordIdx = 0; currentWordIdx = 0; };
-            synth.speak(utterance);
-        }
-
-        var voiceMap = { "US Female": "female", "US Male": "male", "UK Female": "female", "UK Male": "male" };
-        var voiceLangMap = { "US Female": "en-US", "US Male": "en-US", "UK Female": "en-GB", "UK Male": "en-GB" };
-        var availableVoices = [];
-        var voicesReady = false;
-        function loadVoices() {
-            if (!synth) return;
-            availableVoices = synth.getVoices();
-            if (availableVoices.length > 0) voicesReady = true;
-        }
-        loadVoices();
-        if (synth.onvoiceschanged !== undefined) {
-            synth.onvoiceschanged = loadVoices;
-        }
-
-        function findVoice(preset) {
-            if (!voicesReady) return null;
-            var gender = voiceMap[preset];
-            var lang = voiceLangMap[preset];
-            var maleNames = ['david','mark','james','john','paul','daniel','alex','guy','george','michael','peter','richard'];
-            var femaleNames = ['zira','hazel','susan','linda','mary','karen','samantha','jenny','emma','olivia','sophia','mia'];
-            var names = gender === 'male' ? maleNames : femaleNames;
-            for (var i = 0; i < availableVoices.length; i++) {
-                var v = availableVoices[i];
-                if (v.lang === lang) {
-                    var name = v.name.toLowerCase();
-                    for (var k = 0; k < names.length; k++) {
-                        if (name.indexOf(names[k]) >= 0) return v;
-                    }
-                }
-            }
-            for (var i = 0; i < availableVoices.length; i++) {
-                var v = availableVoices[i];
-                if (v.lang === lang) return v;
-            }
-            for (var i = 0; i < availableVoices.length; i++) {
-                if (availableVoices[i].lang.startsWith('en')) return availableVoices[i];
-            }
-            return availableVoices.length > 0 ? availableVoices[0] : null;
-        }
+        audioPlayer.addEventListener("play", function() {
+            setButtons(true);
+            statusEl.textContent = "Playing";
+        });
+        audioPlayer.addEventListener("ended", function() {
+            setButtons(false);
+            statusEl.textContent = "Finished";
+            audioPlayer.currentTime = 0;
+        });
+        audioPlayer.addEventListener("pause", function() {
+            setButtons(false);
+        });
+        audioPlayer.addEventListener("error", function() {
+            setButtons(false);
+            statusEl.textContent = "Playback error";
+        });
 
         window.playReader = function() {
-            if (!synth) { statusEl.textContent = "Speech not supported"; return; }
-            if (pausedWordIdx > 0 && wordElements.length > 0) {
-                var remaining = wordElements.slice(pausedWordIdx).map(function(el) { return el.textContent; }).join('');
-                currentWordIdx = pausedWordIdx;
-                wordElements.forEach(function(el) { el.classList.remove("highlight"); });
-                speakUtterance(remaining);
+            if (audioUrl) {
+                audioPlayer.play();
                 return;
             }
-            stopReader();
-            pausedWordIdx = 0;
-            currentWordIdx = 0;
-            wordElements.forEach(function(el) { el.classList.remove("highlight"); });
-            speakUtterance(fullText);
-        };
-        window.pauseReader = function() {
-            if (synth && synth.speaking) {
-                synth.cancel();
-                pausedWordIdx = currentWordIdx;
-                setButtons(true, true);
-                statusEl.textContent = "Paused";
+            if (!fullText || !fullText.trim()) {
+                statusEl.textContent = "No text to read";
+                return;
             }
+            statusEl.textContent = "Generating audio...";
+            playBtn.disabled = true;
+            var formData = new FormData();
+            formData.append("text", fullText);
+            fetch("/api/speak", { method: "POST", body: formData })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.error) {
+                        statusEl.textContent = "Error: " + data.error;
+                        playBtn.disabled = false;
+                        return;
+                    }
+                    audioUrl = data.audio_url;
+                    audioPlayer.src = audioUrl;
+                    audioPlayer.playbackRate = parseFloat(speedSlider.value);
+                    audioPlayer.play();
+                })
+                .catch(function(err) {
+                    statusEl.textContent = "Request failed";
+                    playBtn.disabled = false;
+                });
         };
         window.stopReader = function() {
-            if (synth) synth.cancel();
-            setButtons(false, false);
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+            setButtons(false);
             statusEl.textContent = "";
-            pausedWordIdx = 0;
-            currentWordIdx = 0;
-            wordElements.forEach(function(el) { el.classList.remove("highlight"); });
         };
 
         // AJAX form submissions

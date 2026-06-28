@@ -1,12 +1,14 @@
+import hashlib
 import json
 import os
-from flask import Flask, render_template, request, jsonify
-from pdf_to_audiobook import extract_text
+from flask import Flask, render_template, request, jsonify, send_from_directory
+from pdf_to_audiobook import extract_text, convert_sync
 import newspaper
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "uploads"
 app.config["OUTPUT_FOLDER"] = "output"
+app.config["AUDIO_FOLDER"] = "generated_audio"
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 
 
@@ -103,7 +105,29 @@ def api_fetch_article():
         return jsonify(error=f"Failed to fetch article: {e}")
 
 
+@app.route("/api/speak", methods=["POST"])
+def api_speak():
+    text = request.form.get("text", "").strip()
+    if not text:
+        return jsonify(error="No text provided.")
+    text_hash = hashlib.md5(text.encode()).hexdigest()
+    output_filename = f"{text_hash}.mp3"
+    output_path = os.path.join(app.config["AUDIO_FOLDER"], output_filename)
+    if not os.path.exists(output_path):
+        try:
+            convert_sync(text, output_path, voice="female", rate="normal")
+        except Exception as e:
+            return jsonify(error=f"Audio generation failed: {e}")
+    return jsonify(audio_url=f"/audio/{output_filename}")
+
+
+@app.route("/audio/<path:filename>")
+def serve_audio(filename):
+    return send_from_directory(app.config["AUDIO_FOLDER"], filename)
+
+
 if __name__ == "__main__":
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
     os.makedirs(app.config["OUTPUT_FOLDER"], exist_ok=True)
+    os.makedirs(app.config["AUDIO_FOLDER"], exist_ok=True)
     app.run(debug=True)
