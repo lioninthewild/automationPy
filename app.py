@@ -1,6 +1,7 @@
 import os
-from flask import Flask, render_template, request, send_from_directory
-from pdf_to_audiobook import extract_text, convert_sync
+from flask import Flask, render_template, request
+from pdf_to_audiobook import extract_text
+import newspaper
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "uploads"
@@ -8,82 +9,57 @@ app.config["OUTPUT_FOLDER"] = "output"
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 
 
-def _cleanup_folder(folder):
-    for filename in os.listdir(folder):
-        if filename == ".gitkeep":
-            continue
-        path = os.path.join(folder, filename)
-        try:
-            if os.path.isfile(path):
-                os.remove(path)
-        except Exception:
-            pass
-
-
-@app.route("/audio/<filename>")
-def serve_audio(filename):
-    return send_from_directory(app.config["OUTPUT_FOLDER"], filename)
-
-
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        file = request.files.get("pdf")
-        if file and file.filename:
-            filepath = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
-            file.save(filepath)
+        input_type = request.form.get("input_type", "file")
+        error = None
+        full_text = None
 
-            preview = None
-            error = None
-            text = None
-            try:
-                text = extract_text(filepath)
-                if text.strip():
-                    preview = text[:500]
-                else:
-                    error = "No text could be extracted from this PDF."
-            except Exception as e:
-                error = f"Failed to read PDF: {e}"
+        # --- Text input ---
+        if input_type == "text":
+            full_text = request.form.get("content", "").strip()
+            if not full_text:
+                error = "No text provided."
 
-            return render_template("index.html",
-                uploaded=file.filename, preview=preview,
-                full_text=text, error=error)
+        # --- File upload ---
+        elif input_type == "file":
+            file = request.files.get("pdf")
+            if file and file.filename:
+                filepath = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+                file.save(filepath)
+                try:
+                    full_text = extract_text(filepath)
+                    if not full_text.strip():
+                        error = "No text could be extracted from this PDF."
+                except Exception as e:
+                    error = f"Failed to read PDF: {e}"
 
-        convert_name = request.form.get("convert")
-        if convert_name:
-            filepath = os.path.join(app.config["UPLOAD_FOLDER"], convert_name)
-            preview = None
-            audio_file = None
-            error = None
-            voice = request.form.get("voice", "female")
-            rate = request.form.get("rate", "normal")
-
-            try:
-                text = extract_text(filepath)
-                if text.strip():
-                    preview = text[:500]
-                    audio_name = f"{os.path.splitext(convert_name)[0]}.mp3"
-                    audio_path = os.path.join(app.config["OUTPUT_FOLDER"], audio_name)
-
-                    convert_sync(text, audio_path, voice, rate)
-                    audio_file = audio_name
-                else:
-                    error = "No text could be extracted from this PDF."
-            except Exception as e:
-                error = f"Conversion failed: {e}"
-
-            return render_template("index.html",
-                uploaded=convert_name, preview=preview,
-                audio_file=audio_file, error=error)
+        return render_template("index.html",
+            full_text=full_text, error=error)
 
     return render_template("index.html")
 
 
-@app.route("/cleanup", methods=["POST"])
-def cleanup():
-    _cleanup_folder(app.config["UPLOAD_FOLDER"])
-    _cleanup_folder(app.config["OUTPUT_FOLDER"])
-    return render_template("index.html", cleaned=True)
+@app.route("/fetch-article", methods=["POST"])
+def fetch_article():
+    url = request.form.get("url", "").strip()
+    if not url:
+        return render_template("index.html", error="No URL provided.")
+    try:
+        article = newspaper.Article(url)
+        article.download()
+        article.parse()
+        text = article.text
+        if text.strip():
+            return render_template("index.html",
+                full_text=text)
+        else:
+            return render_template("index.html",
+                error="Could not extract any text from this URL.")
+    except Exception as e:
+        return render_template("index.html",
+            error=f"Failed to fetch article: {e}")
 
 
 if __name__ == "__main__":
