@@ -37,7 +37,7 @@
                 <!-- Tab panes -->
                 <div class="tab-content">
                     <div class="tab-pane active" id="tab-file">
-                        <form id="fileForm">
+                        <form id="fileForm" method="post" enctype="multipart/form-data" action="/">
                             <div class="mb-3">
                                 <label class="form-label">Upload a PDF</label>
                                 <input type="file" name="pdf" accept=".pdf" id="fileInput" style="display:none">
@@ -50,7 +50,7 @@
                         </form>
                     </div>
                     <div class="tab-pane" id="tab-text">
-                        <form id="textForm">
+                        <form id="textForm" method="post" action="/">
                             <div class="mb-3">
                                 <label class="form-label">Paste your text</label>
                                 <textarea class="form-control" name="content" rows="8" placeholder="Paste or type your text here..."></textarea>
@@ -59,7 +59,7 @@
                         </form>
                     </div>
                     <div class="tab-pane" id="tab-link">
-                        <form id="linkForm">
+                        <form id="linkForm" method="post" action="/fetch-article">
                             <div class="mb-3">
                                 <label class="form-label">Article URL</label>
                                 <input class="form-control" type="url" name="url" placeholder="https://example.com/article">
@@ -175,6 +175,7 @@
         var availableVoices = [];
         var voicesReady = false;
         function loadVoices() {
+            if (!synth) return;
             availableVoices = synth.getVoices();
             if (availableVoices.length > 0) voicesReady = true;
         }
