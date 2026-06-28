@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF to Audiobook</title>
     <style>
-        .w.highlight { background: #ffeb3b; border-radius: 2px; }
-        .w { transition: background 0.15s; }
+        .w.highlight { background: #3b82f6; color: white; border-radius: 3px; padding: 0 1px; }
+        .w { transition: background 0.15s, color 0.15s; }
         #text-display { white-space: pre-wrap; }
+        .reader-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -32,13 +33,13 @@
             <div id="text-display"></div>
         </div>
         <p>
-            <button onclick="play()">▶ Play</button>
-            <button onclick="pauseReader()">⏸ Pause</button>
-            <button onclick="stopReader()">⏹ Stop</button>
+            <button id="playBtn" class="reader-btn" onclick="playReader()">▶ Play</button>
+            <button id="pauseBtn" class="reader-btn" onclick="pauseReader()" disabled>⏸ Pause</button>
+            <button id="stopBtn" class="reader-btn" onclick="stopReader()" disabled>⏹ Stop</button>
             <span id="status"></span>
         </p>
         <script>
-            var fullText = {{ full_text|tojson }}.replace(/\s+/g, ' ');
+            var fullText = {{ full_text|tojson }}.replace(/\s+/g, ' ').replace(/[^a-zA-Z0-9\s.,!?'-]/g, '');
             var container = document.getElementById("text-display");
             var words = fullText.match(/\S+\s*/g) || [];
             var charOffset = 0;
@@ -57,39 +58,56 @@
             var synth = window.speechSynthesis;
             var utterance = null;
             var currentWordIdx = 0;
+            var playBtn = document.getElementById("playBtn");
+            var pauseBtn = document.getElementById("pauseBtn");
+            var stopBtn = document.getElementById("stopBtn");
+            var statusEl = document.getElementById("status");
 
-            function play() {
-                if (!synth) { document.getElementById("status").textContent = "Speech not supported"; return; }
-                if (synth.speaking && !synth.paused) return;
-                if (synth.paused) { synth.resume(); return; }
+            function setButtons(playing, paused) {
+                playBtn.disabled = playing && !paused;
+                pauseBtn.disabled = !playing || paused;
+                stopBtn.disabled = !playing;
+            }
+
+            function findSpan(charIndex) {
+                for (var i = 0; i < wordElements.length; i++) {
+                    var s = wordElements[i];
+                    if (charIndex >= parseInt(s.dataset.start) && charIndex < parseInt(s.dataset.end)) {
+                        return i;
+                    }
+                }
+                return -1;
+            }
+
+            function playReader() {
+                if (!synth) { statusEl.textContent = "Speech not supported"; return; }
+                if (synth.paused) { synth.resume(); setButtons(true, false); statusEl.textContent = "Playing"; return; }
                 stopReader();
-                if (currentWordIdx >= wordElements.length) currentWordIdx = 0;
+                currentWordIdx = 0;
+                wordElements.forEach(function(el) { el.classList.remove("highlight"); });
 
                 utterance = new SpeechSynthesisUtterance(fullText);
                 utterance.rate = 1.0;
                 utterance.onboundary = function(e) {
                     if (e.name !== "word") return;
-                    if (currentWordIdx > 0 && currentWordIdx - 1 < wordElements.length)
-                        (wordElements[currentWordIdx - 1] || {}).classList &&
-                        wordElements[currentWordIdx - 1].classList.remove("highlight");
-                    while (currentWordIdx < wordElements.length) {
-                        var s = wordElements[currentWordIdx];
-                        if (e.charIndex >= parseInt(s.dataset.start) && e.charIndex < parseInt(s.dataset.end)) {
-                            s.classList.add("highlight");
-                            s.scrollIntoView({ block: "nearest" });
-                            break;
-                        }
-                        currentWordIdx++;
+                    wordElements.forEach(function(el) { el.classList.remove("highlight"); });
+                    var idx = findSpan(e.charIndex);
+                    if (idx >= 0) {
+                        wordElements[idx].classList.add("highlight");
+                        wordElements[idx].scrollIntoView({ block: "nearest" });
+                        currentWordIdx = idx + 1;
                     }
-                    currentWordIdx++;
                 };
-                utterance.onend = function() { currentWordIdx = 0; };
-                utterance.onerror = function() { currentWordIdx = 0; };
+                utterance.onstart = function() { setButtons(true, false); statusEl.textContent = "Playing"; };
+                utterance.onend = function() { setButtons(false, false); statusEl.textContent = "Finished"; currentWordIdx = 0; };
+                utterance.onerror = function() { setButtons(false, false); statusEl.textContent = "Error"; currentWordIdx = 0; };
                 synth.speak(utterance);
             }
-            function pauseReader() { if (synth) synth.pause(); }
+            function pauseReader() { if (synth) { synth.pause(); setButtons(true, true); statusEl.textContent = "Paused"; } }
             function stopReader() {
                 if (synth) synth.cancel();
+                setButtons(false, false);
+                statusEl.textContent = "";
                 currentWordIdx = 0;
                 wordElements.forEach(function(el) { el.classList.remove("highlight"); });
             }
