@@ -1,5 +1,6 @@
+import json
 import os
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 from pdf_to_audiobook import extract_text
 import newspaper
 
@@ -9,6 +10,22 @@ app.config["OUTPUT_FOLDER"] = "output"
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 
 
+def _parse_url(url: str) -> str:
+    article = newspaper.Article(url)
+    article.download()
+    article.parse()
+    return article.text
+
+
+def _extract_pdf(path: str) -> str:
+    text = extract_text(path)
+    if not text.strip():
+        raise ValueError("No text could be extracted from this PDF.")
+    return text
+
+
+# --- HTML routes (progressive enhancement fallback) ---
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
@@ -16,24 +33,20 @@ def index():
         error = None
         full_text = None
 
-        # --- Text input ---
         if input_type == "text":
             full_text = request.form.get("content", "").strip()
             if not full_text:
                 error = "No text provided."
 
-        # --- File upload ---
         elif input_type == "file":
             file = request.files.get("pdf")
             if file and file.filename:
                 filepath = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
                 file.save(filepath)
                 try:
-                    full_text = extract_text(filepath)
-                    if not full_text.strip():
-                        error = "No text could be extracted from this PDF."
+                    full_text = _extract_pdf(filepath)
                 except Exception as e:
-                    error = f"Failed to read PDF: {e}"
+                    error = str(e)
 
         return render_template("index.html",
             full_text=full_text, error=error)
@@ -47,19 +60,47 @@ def fetch_article():
     if not url:
         return render_template("index.html", error="No URL provided.")
     try:
-        article = newspaper.Article(url)
-        article.download()
-        article.parse()
-        text = article.text
-        if text.strip():
-            return render_template("index.html",
-                full_text=text)
-        else:
-            return render_template("index.html",
-                error="Could not extract any text from this URL.")
+        text = _parse_url(url)
+        return render_template("index.html", full_text=text)
     except Exception as e:
         return render_template("index.html",
             error=f"Failed to fetch article: {e}")
+
+
+# --- JSON API endpoints (for AJAX) ---
+
+@app.route("/api/text", methods=["POST"])
+def api_text():
+    content = request.form.get("content", "").strip()
+    if not content:
+        return jsonify(error="No text provided.")
+    return jsonify(full_text=content)
+
+
+@app.route("/api/upload", methods=["POST"])
+def api_upload():
+    file = request.files.get("pdf")
+    if not file or not file.filename:
+        return jsonify(error="No file provided.")
+    filepath = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+    file.save(filepath)
+    try:
+        full_text = _extract_pdf(filepath)
+        return jsonify(full_text=full_text)
+    except Exception as e:
+        return jsonify(error=str(e))
+
+
+@app.route("/api/fetch-article", methods=["POST"])
+def api_fetch_article():
+    url = request.form.get("url", "").strip()
+    if not url:
+        return jsonify(error="No URL provided.")
+    try:
+        text = _parse_url(url)
+        return jsonify(full_text=text)
+    except Exception as e:
+        return jsonify(error=f"Failed to fetch article: {e}")
 
 
 if __name__ == "__main__":
