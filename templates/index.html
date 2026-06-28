@@ -114,17 +114,13 @@
             var fullText = {{ full_text|tojson }}.replace(/\s+/g, ' ').replace(/[^a-zA-Z0-9\s.,!?'-]/g, '');
             var container = document.getElementById("text-display");
             var words = fullText.match(/\S+\s*/g) || [];
-            var charOffset = 0;
             var wordElements = [];
             words.forEach(function(w) {
                 var span = document.createElement("span");
                 span.className = "w";
-                span.dataset.start = charOffset;
-                span.dataset.end = charOffset + w.length;
                 span.textContent = w;
                 container.appendChild(span);
                 wordElements.push(span);
-                charOffset += w.length;
             });
 
             var synth = window.speechSynthesis;
@@ -178,16 +174,6 @@
                 return null;
             }
 
-            function findSpan(charIndex) {
-                for (var i = 0; i < wordElements.length; i++) {
-                    var s = wordElements[i];
-                    if (charIndex >= parseInt(s.dataset.start) && charIndex < parseInt(s.dataset.end)) {
-                        return i;
-                    }
-                }
-                return -1;
-            }
-
             window.playReader = function() {
                 if (!synth) { statusEl.textContent = "Speech not supported"; return; }
                 if (synth.paused) { synth.resume(); setButtons(true, false); statusEl.textContent = "Playing"; return; }
@@ -202,12 +188,11 @@
                 utterance.onboundary = function(e) {
                     if (e.name !== "word") return;
                     wordElements.forEach(function(el) { el.classList.remove("highlight"); });
-                    var idx = findSpan(e.charIndex);
-                    if (idx >= 0) {
-                        wordElements[idx].classList.add("highlight");
-                        wordElements[idx].scrollIntoView({ block: "nearest" });
-                        currentWordIdx = idx + 1;
+                    if (currentWordIdx < wordElements.length) {
+                        wordElements[currentWordIdx].classList.add("highlight");
+                        wordElements[currentWordIdx].scrollIntoView({ block: "nearest" });
                     }
+                    currentWordIdx++;
                 };
                 utterance.onstart = function() { setButtons(true, false); statusEl.textContent = "Playing"; };
                 utterance.onend = function() { setButtons(false, false); statusEl.textContent = "Finished"; currentWordIdx = 0; };
