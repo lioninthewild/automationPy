@@ -40,7 +40,11 @@
                         <form id="fileForm">
                             <div class="mb-3">
                                 <label class="form-label">Upload a PDF</label>
-                                <input class="form-control" type="file" name="pdf" accept=".pdf">
+                                <input type="file" name="pdf" accept=".pdf" id="fileInput" style="display:none">
+                                <div>
+                                    <button type="button" class="btn btn-primary" onclick="document.getElementById('fileInput').click()">Choose File</button>
+                                    <span id="fileName" class="ms-2 text-muted small">No file chosen</span>
+                                </div>
                             </div>
                             <button type="submit" class="btn btn-primary w-100">Upload</button>
                         </form>
@@ -104,6 +108,7 @@
         var synth = window.speechSynthesis;
         var utterance = null;
         var currentWordIdx = 0;
+        var pausedWordIdx = 0;
         var playBtn = document.getElementById("playBtn");
         var pauseBtn = document.getElementById("pauseBtn");
         var stopBtn = document.getElementById("stopBtn");
@@ -131,6 +136,7 @@
                 container.appendChild(span);
                 wordElements.push(span);
             });
+            pausedWordIdx = 0;
             currentWordIdx = 0;
         }
 
@@ -161,48 +167,56 @@
             if (!voicesReady) return null;
             var gender = voiceMap[preset];
             var lang = voiceLangMap[preset];
+            var maleNames = ['david','mark','james','john','paul','daniel','alex','guy','george','michael','peter','richard'];
+            var femaleNames = ['zira','hazel','susan','linda','mary','karen','samantha','jenny','emma','olivia','sophia','mia'];
+            var names = gender === 'male' ? maleNames : femaleNames;
             for (var i = 0; i < availableVoices.length; i++) {
                 var v = availableVoices[i];
-                if (v.lang === lang && v.name.toLowerCase().indexOf(gender) >= 0) {
-                    return v;
+                if (v.lang === lang) {
+                    var name = v.name.toLowerCase();
+                    for (var k = 0; k < names.length; k++) {
+                        if (name.indexOf(names[k]) >= 0) return v;
+                    }
                 }
             }
             for (var i = 0; i < availableVoices.length; i++) {
                 var v = availableVoices[i];
                 if (v.lang === lang) return v;
             }
-            return null;
+            for (var i = 0; i < availableVoices.length; i++) {
+                if (availableVoices[i].lang.startsWith('en')) return availableVoices[i];
+            }
+            return availableVoices.length > 0 ? availableVoices[0] : null;
         }
 
         window.playReader = function() {
             if (!synth) { statusEl.textContent = "Speech not supported"; return; }
-            if (synth.paused) { synth.resume(); setButtons(true, false); statusEl.textContent = "Playing"; return; }
+            if (pausedWordIdx > 0 && wordElements.length > 0) {
+                var remaining = wordElements.slice(pausedWordIdx).map(function(el) { return el.textContent; }).join('');
+                currentWordIdx = pausedWordIdx;
+                wordElements.forEach(function(el) { el.classList.remove("highlight"); });
+                speakUtterance(remaining);
+                return;
+            }
             stopReader();
+            pausedWordIdx = 0;
             currentWordIdx = 0;
             wordElements.forEach(function(el) { el.classList.remove("highlight"); });
-            utterance = new SpeechSynthesisUtterance(fullText);
-            utterance.rate = parseFloat(speedSlider.value);
-            var selectedVoice = findVoice(voiceSelect.value);
-            if (selectedVoice) utterance.voice = selectedVoice;
-            utterance.onboundary = function(e) {
-                if (e.name !== "word") return;
-                wordElements.forEach(function(el) { el.classList.remove("highlight"); });
-                if (currentWordIdx < wordElements.length) {
-                    wordElements[currentWordIdx].classList.add("highlight");
-                    wordElements[currentWordIdx].scrollIntoView({ block: "nearest" });
-                }
-                currentWordIdx++;
-            };
-            utterance.onstart = function() { setButtons(true, false); statusEl.textContent = "Playing"; };
-            utterance.onend = function() { setButtons(false, false); statusEl.textContent = "Finished"; currentWordIdx = 0; };
-            utterance.onerror = function() { setButtons(false, false); statusEl.textContent = "Error"; currentWordIdx = 0; };
-            synth.speak(utterance);
+            speakUtterance(fullText);
         };
-        window.pauseReader = function() { if (synth) { synth.pause(); setButtons(true, true); statusEl.textContent = "Paused"; } };
+        window.pauseReader = function() {
+            if (synth && synth.speaking) {
+                synth.cancel();
+                pausedWordIdx = currentWordIdx;
+                setButtons(true, true);
+                statusEl.textContent = "Paused";
+            }
+        };
         window.stopReader = function() {
             if (synth) synth.cancel();
             setButtons(false, false);
             statusEl.textContent = "";
+            pausedWordIdx = 0;
             currentWordIdx = 0;
             wordElements.forEach(function(el) { el.classList.remove("highlight"); });
         };
