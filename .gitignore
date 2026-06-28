@@ -1,5 +1,6 @@
 .venv/
 __pycache__/
+REQUIREMENTS.md
 uploads/*.pdf
 uploads/*.wav
 output/*.mp3
