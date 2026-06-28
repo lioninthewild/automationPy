@@ -150,6 +150,26 @@
             stopBtn.disabled = !playing;
         }
 
+        function speakUtterance(text) {
+            utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = parseFloat(speedSlider.value);
+            var selectedVoice = findVoice(voiceSelect.value);
+            if (selectedVoice) utterance.voice = selectedVoice;
+            utterance.onboundary = function(e) {
+                if (e.name !== "word") return;
+                wordElements.forEach(function(el) { el.classList.remove("highlight"); });
+                if (currentWordIdx < wordElements.length) {
+                    wordElements[currentWordIdx].classList.add("highlight");
+                    wordElements[currentWordIdx].scrollIntoView({ block: "nearest" });
+                }
+                currentWordIdx++;
+            };
+            utterance.onstart = function() { setButtons(true, false); statusEl.textContent = "Playing"; };
+            utterance.onend = function() { setButtons(false, false); statusEl.textContent = "Finished"; pausedWordIdx = 0; currentWordIdx = 0; };
+            utterance.onerror = function() { setButtons(false, false); statusEl.textContent = "Error"; pausedWordIdx = 0; currentWordIdx = 0; };
+            synth.speak(utterance);
+        }
+
         var voiceMap = { "US Female": "female", "US Male": "male", "UK Female": "female", "UK Male": "male" };
         var voiceLangMap = { "US Female": "en-US", "US Male": "en-US", "UK Female": "en-GB", "UK Male": "en-GB" };
         var availableVoices = [];
