@@ -250,6 +250,10 @@
                 });
         }
 
+        document.getElementById("fileInput").addEventListener("change", function() {
+            document.getElementById("fileName").textContent = this.files.length > 0 ? this.files[0].name : "No file chosen";
+        });
+
         document.getElementById("textForm").addEventListener("submit", function(e) {
             e.preventDefault();
             submitForm(this, "/api/text");
